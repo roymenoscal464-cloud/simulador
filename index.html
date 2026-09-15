@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador de Razonamiento Lógico - UTEQ</title>
+<style>
+:root{--bg:#f3f6f8;--card:#fff;--ink:#17212b;--muted:#66727e;--accent:#14532d;--line:#d9e1e7;--good:#166534;--bad:#b91c1c}
+*{box-sizing:border-box} body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#0f3d2e;color:white;padding:18px 20px}.wrap{max-width:920px;margin:auto}
+header h1{font-size:22px;margin:0 0 5px} header p{margin:0;opacity:.9;font-size:14px}
+main{padding:20px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 4px 18px #0000000b}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}.pill{background:#e7f0eb;border-radius:999px;padding:7px 11px;font-size:13px}
+.progress{height:9px;background:#e7ecef;border-radius:10px;overflow:hidden;margin:15px 0 22px}.bar{height:100%;background:var(--accent);width:0}
+.q{font-size:19px;font-weight:700;line-height:1.4;margin-bottom:18px}.options{display:grid;gap:10px}
+.option{border:1px solid #cfd8df;border-radius:10px;padding:13px 14px;cursor:pointer;background:white;text-align:left;font-size:16px}
+.option:hover{border-color:#7b8c98}.option.sel{border:2px solid var(--accent);background:#edf6f0}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:22px;flex-wrap:wrap}
+button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:white}.secondary{background:#e9eef1;color:#1e2933}.danger{background:#7f1d1d;color:white}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hidden{display:none}.result{text-align:center}.score{font-size:52px;font-weight:800;color:var(--accent);margin:8px}.review{margin-top:20px;text-align:left}
+.item{border-top:1px solid var(--line);padding:14px 0}.ok{color:var(--good);font-weight:bold}.no{color:var(--bad);font-weight:bold}
+.small{font-size:13px;color:var(--muted)} .timer{font-variant-numeric:tabular-nums;font-weight:700}
+svg{max-width:100%;height:auto}.visual{display:flex;justify-content:center;margin:10px 0 18px}
+@media(max-width:600px){main{padding:10px}.card{padding:16px}.q{font-size:17px}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Simulador de Razonamiento Lógico</h1><p>Práctica dinámica basada en la estructura del examen final proporcionado.</p></div></header>
+<main class="wrap">
+<section id="exam" class="card">
+ <div class="top"><span id="counter" class="pill"></span><span class="pill">⏱ <span id="timer" class="timer">30:00</span></span><span id="answered" class="pill"></span></div>
+ <div class="progress"><div id="bar" class="bar"></div></div>
+ <div id="question" class="q"></div><div id="visual" class="visual"></div><div id="options" class="options"></div>
+ <div class="nav"><button id="prev" class="secondary">← Anterior</button><button id="finish" class="danger">Finalizar examen</button><button id="next" class="primary">Siguiente →</button></div>
+</section>
+<section id="results" class="card hidden result">
+ <h2>Resultado del simulador</h2><div id="score" class="score"></div><div id="summary"></div>
+ <p class="small">Las respuestas se muestran únicamente después de finalizar.</p>
+ <button id="newExam" class="primary">🔄 Generar nuevo simulador</button>
+ <div id="review" class="review"></div>
+</section>
+</main>
+<script>
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>[...a].sort(()=>Math.random()-.5);
+function opts(correct, wrong){let a=shuffle([correct,...wrong]);return {options:a,answer:a.indexOf(correct)}}
+function arithmetic(){
+ let start=Math.floor(Math.random()*8)+2, d=Math.floor(Math.random()*8)+2;
+ let seq=[0,1,2,3,4].map(i=>start+i*d), c=start+5*d;
+ let o=opts(String(c),[String(c+d),String(c-d),String(c+2*d)]);
+ return {q:`¿Qué número continúa la serie?  ${seq.join(", ")}, ___`,...o,e:`Es una progresión aritmética: se suma ${d} en cada paso.`}
+}
+function geometric(){
+ let start=pick([2,3,4]), r=pick([2,3]), seq=[start], i=0; while(i++<3)seq.push(seq.at(-1)*r); let c=seq.at(-1)*r;
+ let o=opts(String(c),[String(c+r),String(c/r),String(c+r*r)]);
+ return {q:`¿Qué número continúa la serie?  ${seq.join(", ")}, ___`,...o,e:`Cada término se multiplica por ${r}.`}
+}
+function squares(){
+ let n=Math.floor(Math.random()*4)+2, seq=[n*n,(n+1)**2,(n+2)**2,(n+3)**2],c=(n+4)**2;
+ let o=opts(String(c),[String(c-2),String(c+2),String((n+5)**2)]);
+ return {q:`¿Qué número continúa la serie?  ${seq.join(", ")}, ___`,...o,e:"Los términos son cuadrados perfectos consecutivos."}
+function alternating(){
+ let a=Math.floor(Math.random()*6)+3,x=Math.floor(Math.random()*4)+2,y=Math.floor(Math.random()*4)+2;
+ let seq=[a,a+x,a+x+y,a+2*x+y,a+2*x+2*y]; let c=a+3*x+2*y;
+ let o=opts(String(c),[String(c+x),String(c-y),String(c+y)]);
+ return {q:`¿Qué número continúa la serie? ${seq.join(", ")}, ___`,...o,e:`Los incrementos alternan +${x}, +${y}.`}
+}
+function analogy(){
+ const bank=[
+ ["ESBOZO : OBRA :: BORRADOR : ?","Documento",["Texto","Versión","Informe"],"Un esbozo es una etapa previa de una obra; un borrador es una etapa previa de un documento."],
+ ["SEMILLA : GERMINACIÓN :: IDEA : ?","Desarrollo",["Reflexión","Creación","Memoria"],"La semilla pasa por germinación; una idea pasa por desarrollo."],
+ ["PRÓLOGO : INTRODUCCIÓN :: EPÍLOGO : ?","Conclusión",["Desenlace","Inicio","Presentación"],"Prólogo e introducción cumplen funciones iniciales; epílogo y conclusión, finales."],
+ ["ÁRBITRO : IMPARCIALIDAD :: JUEZ : ?","Objetividad",["Velocidad","Creatividad","Fuerza"],"La relación es profesión/rol con una cualidad esperada en su actuación."]
+ ]; let b=pick(bank),o=opts(b[1],b[2]);return{q:b[0],...o,e:b[3]}
+}
+function proportion(){
+ let workers=pick([12,18,24]), days=pick([10,12,15]), neww=workers*2; let c=days/2;
+ let o=opts(String(c),[String(days),String(c+2),String(days*2)]);
+ return{q:`Si ${workers} trabajadores realizan una obra en ${days} días, manteniendo el mismo rendimiento, ¿cuántos días necesitarían ${neww} trabajadores?`,...o,e:"Es proporcionalidad inversa: al duplicar trabajadores, el tiempo se reduce a la mitad."}
+}
+function combination(){
+ let n=pick([8,9,10]),r=3,c=n*(n-1)*(n-2)/6;
+ let o=opts(String(c),[String(n*r),String(c+n),String(n*(n-1))]);
+ return{q:`¿De cuántas maneras diferentes se puede seleccionar un comité de ${r} personas de un grupo de ${n}, si el orden no importa?`,...o,e:`Se usan combinaciones: C(${n},3) = ${c}.`}
+}
+function progressionPosition(){
+ let a=pick([4,6,8]),d=pick([3,4,5]),pos=pick([8,9,10]),c=a+(pos-1)*d;
+ let o=opts(String(c),[String(c+d),String(c-d),String(a+pos*d)]);
+ return{q:`En una progresión aritmética el primer término es ${a} y la diferencia es ${d}. ¿Cuál es el término de la posición ${pos}?`,...o,e:`aₙ = a₁ + (n−1)d = ${a} + (${pos}−1)×${d} = ${c}.`}
+}
+function quadratic(){
+ let a=pick([2,3,4]), seq=[0,1,2,3,4].map(n=>a+n*n),c=a+25;
+ let o=opts(String(c),[String(c-1),String(c+2),String(c+5)]);
+ return{q:`¿Qué número continúa la serie? ${seq.join(", ")}, ___`,...o,e:"La parte variable sigue 0², 1², 2², 3², 4², 5²."}
+}
+function spatial(){
+ let variants=[
+ {q:"Una flecha apunta hacia arriba. Si gira 270° en sentido antihorario, ¿hacia dónde apuntará?",c:"Derecha",w:["Izquierda","Abajo","Arriba"],e:"270° antihorario equivale a 90° horario."},
+ {q:"Un objeto se observa desde arriba. ¿Qué vista representa únicamente su distribución horizontal?",c:"Vista superior",w:["Vista frontal","Vista lateral","Perspectiva"],e:"La vista superior proyecta el objeto sobre el plano horizontal."},
+ {q:"Si una figura gira 180°, ¿qué ocurre con su orientación?",c:"Queda invertida respecto de la original",w:["No cambia","Gira solo 90°","Se refleja necesariamente"],e:"Una rotación de 180° corresponde a media vuelta."}
+ ];let b=pick(variants),o=opts(b.c,b.w);return{q:b.q,...o,e:b.e}
+}
+function abstractPattern(){
+ let n=pick([3,4,5]), c=n+1; let o=opts(`${c} puntos`,[`${n} puntos`,`${c+1} puntos`,`${c+2} puntos`]);
+ return{q:`En una secuencia de figuras, cada nueva figura conserva la anterior y añade exactamente un punto. Si la figura actual tiene ${n} puntos, ¿cuántos tendrá la siguiente?`,...o,e:"La regla visual es añadir un punto en cada paso."}
+}
+const gens=[abstractPattern,spatial,analogy,analogy,analogy,arithmetic,geometric,squares,alternating,quadratic,arithmetic,geometric,proportion,proportion,progressionPosition,quadratic,combination,spatial,spatial,abstractPattern,arithmetic,alternating,spatial];
+let questions=[],answers=[],idx=0,seconds=1800,tick;
+function makeExam(){
+ questions=gens.map((g,i)=>({...g(),id:i+1})); answers=Array(questions.length).fill(null);idx=0;seconds=1800;
+ document.getElementById("results").classList.add("hidden");document.getElementById("exam").classList.remove("hidden");
+ clearInterval(tick);tick=setInterval(()=>{seconds--;showTimer();if(seconds<=0)finish()},1000);render();showTimer()
+}
+function showTimer(){let m=Math.floor(seconds/60),s=seconds%60;document.getElementById("timer").textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
+function render(){
+ let q=questions[idx];document.getElementById("counter").textContent=`Pregunta ${idx+1} de ${questions.length}`;
+ document.getElementById("answered").textContent=`Respondidas: ${answers.filter(x=>x!==null).length}/${questions.length}`;
+ document.getElementById("bar").style.width=`${(idx+1)/questions.length*100}%`;document.getElementById("question").textContent=q.q;
+ document.getElementById("visual").innerHTML=q.visual||"";let box=document.getElementById("options");box.innerHTML="";
+ q.options.forEach((x,i)=>{let b=document.createElement("button");b.className="option"+(answers[idx]===i?" sel":"");b.textContent=`${"ABCD"[i]}) ${x}`;b.onclick=()=>{answers[idx]=i;render()};box.appendChild(b)});
+ document.getElementById("prev").disabled=idx===0;document.getElementById("next").disabled=idx===questions.length-1
+}
+document.getElementById("prev").onclick=()=>{if(idx>0){idx--;render()}};document.getElementById("next").onclick=()=>{if(idx<questions.length-1){idx++;render()}};
+document.getElementById("finish").onclick=()=>{if(confirm("¿Deseas finalizar y calificar el simulador?"))finish()};
+function finish(){
+ clearInterval(tick);let correct=questions.reduce((s,q,i)=>s+(answers[i]===q.answer),0),pct=Math.round(correct/questions.length*100);
+ document.getElementById("exam").classList.add("hidden");document.getElementById("results").classList.remove("hidden");
+ document.getElementById("score").textContent=`${correct}/${questions.length}`;
+ document.getElementById("summary").innerHTML=`<b>${pct}% de aciertos</b><br>${questions.length-correct} respuestas incorrectas o sin responder.`;
+ let r=document.getElementById("review");r.innerHTML="<h3>Revisión y explicación</h3>";
+ questions.forEach((q,i)=>{let ok=answers[i]===q.answer;r.innerHTML+=`<div class="item"><div class="${ok?"ok":"no"}">${ok?"✓ Correcta":"✗ Incorrecta"} — Pregunta ${i+1}</div><div>${q.q}</div><div><b>Tu respuesta:</b> ${answers[i]===null?"Sin responder":q.options[answers[i]]}</div><div><b>Respuesta correcta:</b> ${q.options[q.answer]}</div><div class="small"><b>Explicación:</b> ${q.e}</div></div>`})
+ window.scrollTo({top:0,behavior:"smooth"})
+}
+document.getElementById("newExam").onclick=makeExam;
+makeExam();
+</script>
+</body></html>
