@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador de Razonamiento Lógico</title>
+<style>
+:root{--bg:#f3f6f8;--card:#fff;--ink:#17212b;--muted:#66727e;--accent:#14532d;--line:#d9e1e7;--good:#166534;--bad:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#0f3d2e;color:#fff;padding:18px 20px}
+.wrap{max-width:920px;margin:auto}
+header h1{font-size:22px;margin:0 0 5px} header p{margin:0;opacity:.9;font-size:14px}
+main{padding:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 4px 18px #0000000b}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.pill{background:#e7f0eb;border-radius:999px;padding:7px 11px;font-size:13px}
+.progress{height:9px;background:#e7ecef;border-radius:10px;overflow:hidden;margin:15px 0 22px}
+.bar{height:100%;background:var(--accent);width:0}
+.q{font-size:19px;font-weight:700;line-height:1.4;margin-bottom:18px}
+.options{display:grid;gap:10px}
+.option{border:1px solid #cfd8df;border-radius:10px;padding:13px 14px;cursor:pointer;background:white;text-align:left;font-size:16px}
+.option:hover{border-color:#7b8c98} .option.sel{border:2px solid var(--accent);background:#edf6f0}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:22px;flex-wrap:wrap}
+button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}
+.primary{background:var(--accent);color:white} .secondary{background:#e9eef1;color:#1e2933} .danger{background:#991b1b;color:white}
+button:disabled{opacity:.45;cursor:not-allowed} .hidden{display:none!important}
+.result{text-align:center} .score{font-size:52px;font-weight:800;color:var(--accent);margin:8px}
+.review{margin-top:20px;text-align:left} .item{border-top:1px solid var(--line);padding:14px 0}
+.ok{color:var(--good);font-weight:bold} .no{color:var(--bad);font-weight:bold}
+.small{font-size:13px;color:var(--muted)} .timer{font-variant-numeric:tabular-nums;font-weight:700}
+.visual{display:flex;justify-content:center;margin:10px 0 18px;overflow-x:auto}
+svg{max-width:100%;height:auto}
+@media(max-width:600px){main{padding:10px}.card{padding:16px}.q{font-size:17px}.nav button{flex:1}}
+</style>
+</head>
+<body>
+<header>
+ <div class="wrap">
+  <h1>Simulador de Razonamiento Lógico</h1>
+  <p>23 preguntas dinámicas · nivel PREUNIVERSITARIO EXTREMO · razonamiento abstracto, verbal, numérico y espacial</p>
+ </div>
+</header>
+<main class="wrap">
+<section id="exam" class="card">
+ <div class="top">
+  <span id="counter" class="pill">Pregunta 1 de 23</span>
+  <span class="pill">⏱ <span id="timer" class="timer">45:00</span></span>
+  <span id="answered" class="pill">Respondidas: 0/23</span>
+ </div>
+ <div class="progress"><div id="bar" class="bar"></div></div>
+ <div id="question" class="q"></div>
+ <div id="visual" class="visual"></div>
+ <div id="options" class="options"></div>
+ <div class="nav">
+  <button id="prev" type="button" class="secondary">← Anterior</button>
+  <button id="finish" type="button" class="danger">Finalizar examen</button>
+  <button id="next" type="button" class="primary">Siguiente →</button>
+ </div>
+</section>
+
+<section id="results" class="card hidden result">
+ <h2>Resultado del simulador</h2>
+ <div id="score" class="score"></div>
+ <div id="summary"></div>
+ <p class="small">Las respuestas correctas y explicaciones se muestran únicamente al finalizar.</p>
+ <button id="newExam" type="button" class="primary">🔄 Generar nuevo simulador</button>
+ <div id="review" class="review"></div>
+</section>
+</main>
+<script>
+/* Simulador UTEQ - motor de preguntas dinámicas */
+const $ = id => document.getElementById(id);
+const rand=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const pick=a=>a[rand(0,a.length-1)];
+const shuffle=a=>[...a].sort(()=>Math.random()-.5);
+
+function makeOptions(correct, distractors){
+  const vals=[...new Set([String(correct),...distractors.map(String)])];
+  while(vals.length<4) vals.push(String(Number(correct)+rand(2,15)));
+  const options=shuffle(vals.slice(0,4));
+  return {options, answer:options.indexOf(String(correct))};
+}
+const svgWrap = x => `<svg viewBox="0 0 520 190" width="520" role="img" aria-label="Figura de razonamiento">${x}</svg>`;
+const dot=(x,y,r=6,fill="#111")=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>`;
+const sq=(x,y,s=28,fill="none")=>`<rect x="${x}" y="${y}" width="${s}" height="${s}" fill="${fill}" stroke="#111" stroke-width="3"/>`;
+const tri=(x,y,s=35)=>`<polygon points="${x},${y+s} ${x+s/2},${y} ${x+s},${y+s}" fill="none" stroke="#111" stroke-width="3"/>`;
+const arrow=(x,y,deg)=>`<g transform="translate(${x} ${y}) rotate(${deg})"><line x1="-28" y1="0" x2="22" y2="0" stroke="#111" stroke-width="5"/><polygon points="22,-10 42,0 22,10" fill="#111"/></g>`;
+
+function qSeries(){
+ const mode=pick(["arith","geom","squares","alt"]);
+ if(mode==="arith"){let a=rand(7,35),d=rand(4,13),s=Array.from({length:5},(_,i)=>a+i*d),c=a+5*d,o=makeOptions(c,[c-d,c+d,c+2*d]);return {type:"Serie numérica",q:`¿Qué número continúa la serie? ${s.join(", ")}, ___`,...o,e:`La diferencia es constante: +${d}.`}}
+ if(mode==="geom"){let a=pick([2,3,4,5]),r=pick([2,3,4]),s=Array.from({length:4},(_,i)=>a*r**i),c=a*r**4,o=makeOptions(c,[c/r,c+r,c-r]);return {type:"Serie numérica",q:`¿Qué número continúa la serie? ${s.join(", ")}, ___`,...o,e:`Cada término se multiplica por ${r}.`}}
+ if(mode==="squares"){let n=rand(4,10),s=Array.from({length:4},(_,i)=>(n+i)**2),c=(n+4)**2,o=makeOptions(c,[c-2,c+2,(n+5)**2]);return {type:"Serie numérica",q:`¿Qué número continúa la serie? ${s.join(", ")}, ___`,...o,e:"Son cuadrados perfectos consecutivos."}}
+ let a=rand(5,20),x=rand(3,8),y=rand(9,16),s=[a,a+x,a+x+y,a+2*x+y,a+2*x+2*y],c=a+3*x+2*y,o=makeOptions(c,[c-x,c+y,c+x]);return {type:"Serie numérica",q:`¿Qué número continúa la serie? ${s.join(", ")}, ___`,...o,e:`Los incrementos alternan +${x}, +${y}.`}
+}
+function qAnalogy(){
+ const b=pick([
+ ["ESBOZO : OBRA :: BORRADOR : ?","Documento",["Texto","Visión","Ensayo"],"Ambos primeros términos representan una etapa preliminar del segundo."],
+ ["ÁRBITRO : IMPARCIALIDAD :: JUEZ : ?","Objetividad",["Rapidez","Autoridad","Memoria"],"Se relaciona un rol con una cualidad necesaria para ejercerlo."],
+ ["SEMILLA : GERMINACIÓN :: IDEA : ?","Desarrollo",["Olvido","Silencio","Copia"],"La relación es origen y proceso de desarrollo."],
+ ["PRÓLOGO : INTRODUCCIÓN :: EPÍLOGO : ?","Conclusión",["Portada","Índice","Inicio"],"Los primeros abren una obra; los segundos la cierran."]
+ ]); let o=makeOptions(b[1],b[2]);return{type:"Analogía verbal",q:b[0],...o,e:b[3]}
+}
+function qWork(){
+ let w=pick([12,18,24,30,36]),days=pick([12,18,24,30]),factor=pick([2,3]),nw=w*factor,c=days/factor;
+ if(!Number.isInteger(c)) return qWork();
+ let o=makeOptions(c,[days,c+2,days*factor]);return{type:"Proporcionalidad",q:`${w} trabajadores completan una obra en ${days} días. Si trabajan ${nw} personas con igual rendimiento, ¿cuántos días necesitarán?`,...o,e:`Trabajo constante: ${w}×${days} = ${nw}×días. Resultado: ${c} días.`}
+}
+function qAP(){
+ let a=rand(5,20),d=rand(3,10),n=rand(10,18),c=a+(n-1)*d,o=makeOptions(c,[c-d,c+d,a+n*d]);return{type:"Progresión aritmética",q:`El primer término de una progresión aritmética es ${a} y su diferencia es ${d}. ¿Cuál es el término ${n}?`,...o,e:`aₙ=a₁+(n−1)d=${a}+(${n}−1)×${d}=${c}.`}
+}
+function qComb(){
+ let n=pick([10,11,12,13,14]),c=n*(n-1)*(n-2)/6,o=makeOptions(c,[n*3,n*(n-1),c+n]);return{type:"Combinatoria",q:`De un grupo de ${n} estudiantes se seleccionan 3 para un comité. El orden no importa. ¿Cuántos comités distintos pueden formarse?`,...o,e:`C(${n},3)=${n}!/(3!(${n}-3)!)=${c}.`}
+}
+function qRotation(){
+ const start=pick([0,90,180,270]),turn=pick([90,180,270]),dir=pick(["horario","antihorario"]);
+ const final=(start+(dir==="horario"?turn:-turn)+360)%360;
+ const names={0:"Derecha",90:"Abajo",180:"Izquierda",270:"Arriba"};
+ let o=makeOptions(names[final],Object.values(names).filter(x=>x!==names[final]));
+ return{type:"Rotación espacial",q:`Observe la flecha. Si gira ${turn}° en sentido ${dir}, ¿hacia dónde apuntará?`,visual:svgWrap(arrow(260,90,start)),...o,e:`Aplicando el giro indicado, la orientación final es ${names[final]}.`}
+}
+function qDots(){
+ let n=rand(2,5),next=n+1;
+ let figs=""; for(let k=0;k<3;k++){let cx=100+k*160;figs+=`<circle cx="${cx}" cy="90" r="48" fill="none" stroke="#111" stroke-width="3"/>`;for(let j=0;j<n+k;j++)figs+=dot(cx-22+(j%3)*22,72+Math.floor(j/3)*23)}
+ let c=n+3,o=makeOptions(`${c} puntos`,[`${c-1} puntos`,`${c+1} puntos`,`${c+2} puntos`]);
+ return{type:"Razonamiento abstracto",q:"Cada figura añade un punto respecto de la anterior. ¿Cuántos puntos debe contener la siguiente figura?",visual:svgWrap(figs),...o,e:`Las cantidades son ${n}, ${n+1}, ${n+2}; la siguiente contiene ${n+3}.`}
+}
+function qMatrix(){
+ let missing=pick(["tri","square"]), correct=missing==="tri"?"Triángulo":"Cuadrado";
+ let shapes=[[tri(120,35),sq(330,45)],[sq(125,120),missing==="tri"?"":tri(325,110)]];
+ let visual=svgWrap(`<line x1="260" y1="10" x2="260" y2="180" stroke="#999"/><line x1="60" y1="95" x2="460" y2="95" stroke="#999"/>${shapes.flat().join("")}<text x="345" y="150" font-size="42">?</text>`);
+ let o=makeOptions(correct,["Círculo","Rombo",correct==="Triángulo"?"Cuadrado":"Triángulo"]);
+ return{type:"Matriz de figuras",q:"En cada fila y columna aparece una vez cada tipo de figura. ¿Qué figura completa la matriz?",visual,...o,e:`La figura faltante debe ser ${correct.toLowerCase()} para mantener la alternancia.`}
+}
+function qView(){
+ const variant=rand(0,1), correct=variant?"Vista B":"Vista C";
+ const visual=svgWrap(`
+ <g transform="translate(145 25)"><path d="M0 100 L0 55 L55 55 L55 25 L110 25 L110 100 Z" fill="none" stroke="#111" stroke-width="4"/><rect x="70" y="0" width="25" height="25" fill="none" stroke="#111" stroke-width="4"/></g>
+ <text x="300" y="95" font-size="16">→ vista señalada</text>`);
+ let o=makeOptions(correct,["Vista A","Vista D",variant?"Vista C":"Vista B"]);
+ return{type:"Vistas de objeto",q:"A partir del objeto escalonado, seleccione la vista ortogonal que corresponde a la dirección señalada.",visual,...o,e:"Se compara el contorno visible y las diferencias de altura desde la dirección indicada."}
+}
+function qOdd(){
+ let target=rand(0,3), labels=["A","B","C","D"];
+ let visual=svgWrap(labels.map((l,i)=>`<g transform="translate(${70+i*120} 45)">${sq(0,0,45)}${i===target?dot(22,22,8):dot(12,12,6)+dot(33,33,6)}<text x="15" y="75" font-size="18">${l}</text></g>`).join(""));
+ let o=makeOptions(labels[target],labels.filter(x=>x!==labels[target]));
+ return{type:"Figura diferente",q:"¿Cuál de las siguientes figuras no pertenece al grupo?",visual,...o,e:`Tres figuras contienen dos puntos; ${labels[target]} contiene uno y rompe el patrón.`}
+}
+function qSequenceVisual(){
+ let filled=rand(1,3), visual=svgWrap([0,1,2].map((k)=>`<g transform="translate(${70+k*150} 55)">${sq(0,0,70)}${Array.from({length:filled+k},(_,j)=>sq(8+j*18,45,14,"#111")).join("")}</g>`).join(""));
+ let c=filled+3,o=makeOptions(`${c} cuadros negros`,[`${c-1} cuadros negros`,`${c+1} cuadros negros`,`${c+2} cuadros negros`]);
+ return{type:"Secuencia visual",q:"En la serie se agrega un cuadro negro en cada paso. ¿Qué debe aparecer en la siguiente figura?",visual,...o,e:`La cantidad aumenta de uno en uno; corresponde ${c}.`}
+}
+
+
+function qMixedSeries(){
+  const a=rand(2,7), b=rand(3,8);
+  let s=[a,b];
+  for(let i=2;i<6;i++) s.push(s[i-1]+s[i-2]+(i%2?1:-1));
+  const c=s[5]+s[4]-1;
+  let o=makeOptions(c,[c-2,c+2,c+s[0]]);
+  return {type:"Serie numérica avanzada",q:`Determine el siguiente término: ${s.join(", ")}, ___`,...o,e:"Cada término combina los dos anteriores y una corrección alternante +1, −1."};
+}
+function qSecondDiff(){
+  let a=rand(3,12), d=rand(2,6), dd=rand(2,5), s=[a],inc=d;
+  for(let i=1;i<5;i++){s.push(s.at(-1)+inc);inc+=dd}
+  let c=s.at(-1)+inc,o=makeOptions(c,[c-dd,c+dd,c+d]);
+  return {type:"Diferencias de segundo orden",q:`¿Qué término continúa? ${s.join(", ")}, ___`,...o,e:`Las primeras diferencias aumentan constantemente en ${dd}; por tanto existe una segunda diferencia constante.`};
+}
+function qPercentChain(){
+  let base=pick([200,240,300,400,500]),up=pick([20,25,30]),down=pick([10,20,25]);
+  let c=base*(1+up/100)*(1-down/100);
+  let display=Number.isInteger(c)?String(c):c.toFixed(1);
+  let o=makeOptions(display,[base,Math.round(base*(1+(up-down)/100)),Math.round(c+base*.1)]);
+  return {type:"Porcentajes sucesivos",q:`Un valor de ${base} aumenta ${up}% y posteriormente disminuye ${down}% sobre el nuevo valor. ¿Cuál es el resultado final?`,...o,e:`Los porcentajes sucesivos no se suman algebraicamente: ${base}×${1+up/100}×${1-down/100}=${display}.`};
+}
+function qLogic(){
+ const bank=[
+  {q:"Todos los NAR son BEL. Ningún BEL es TIR. Algunos FOS son NAR. ¿Cuál conclusión es necesariamente verdadera?",c:"Algunos FOS no son TIR",w:["Todos los FOS son BEL","Ningún FOS es TIR","Algunos TIR son NAR"],e:"Los FOS que son NAR también son BEL; como ningún BEL es TIR, esos FOS no pueden ser TIR."},
+  {q:"Ningún investigador improvisado es metódico. Algunos analistas son metódicos. Todos los analistas metódicos son rigurosos. ¿Qué se deduce necesariamente?",c:"Algunos rigurosos no son investigadores improvisados",w:["Todos los rigurosos son analistas","Ningún analista improvisa","Todos los analistas son rigurosos"],e:"Existe al menos un analista metódico; es riguroso y, por ser metódico, no puede pertenecer al primer conjunto."},
+  {q:"Si P implica Q y Q implica R. Se sabe que R es falso. ¿Qué debe ser verdadero?",c:"P es falso",w:["Q es verdadero","P es verdadero","R implica P"],e:"Por contraposición: ¬R implica ¬Q y luego ¬P."}
+ ];let b=pick(bank),o=makeOptions(b.c,b.w);return{type:"Lógica deductiva",q:b.q,...o,e:b.e}
+}
+function qClock(){
+ let h=rand(1,11),m=pick([10,20,25,35,40,50]);
+ let minute=6*m, hour=30*h+.5*m, diff=Math.abs(hour-minute);diff=Math.min(diff,360-diff);
+ let c=diff.toFixed(1)+"°",o=makeOptions(c,[(diff+5).toFixed(1)+"°",(Math.abs(diff-5)).toFixed(1)+"°",(180-diff).toFixed(1)+"°"]);
+ return{type:"Razonamiento angular",q:`¿Cuál es el ángulo menor entre las manecillas de un reloj a las ${h}:${String(m).padStart(2,"0")}?`,...o,e:`Minutero: 6m. Horario: 30h+0,5m. La diferencia angular menor es ${c}.`}
+}
+function qVisualXor(){
+ let cells=[
+   [1,0,1,0],[0,1,0,1],[1,1,0,0]
+ ];
+ function cell(x,y,bits){
+   let out=`<rect x="${x}" y="${y}" width="72" height="72" fill="none" stroke="#111" stroke-width="2"/>`;
+   [[15,15],[47,15],[15,47],[47,47]].forEach((p,i)=>{if(bits[i])out+=`<circle cx="${x+p[0]}" cy="${y+p[1]}" r="7" fill="#111"/>`});return out;
+ }
+ const r1=cells[0],r2=cells[1],r3=r1.map((v,i)=>v^r2[i]);
+ const visual=svgWrap(cell(70,20,r1)+cell(170,20,r2)+cell(270,20,r3)+cell(70,105,r2)+cell(170,105,r3)+`<rect x="270" y="105" width="72" height="72" fill="none" stroke="#111" stroke-width="2"/><text x="294" y="153" font-size="34">?</text>`);
+ let target=r2.map((v,i)=>v^r3[i]), count=target.reduce((a,b)=>a+b,0);
+ let o=makeOptions(`${count} puntos`,[`${Math.max(0,count-1)} puntos`,`${count+1} puntos`,`${count+2} puntos`]);
+ return{type:"Matriz lógica XOR",q:"En cada fila, la tercera casilla conserva únicamente las posiciones que aparecen en exactamente una de las dos anteriores (XOR). ¿Cuántos puntos tendrá la casilla faltante?",visual,...o,e:"Se aplica XOR posición por posición entre la primera y segunda casilla de la fila."}
+}
+function qConditional(){
+ let n=rand(4,8), total=n*(n+1)/2, c=total+n*n;
+ let o=makeOptions(c,[total,n*n,c-n,c+n]);
+ return{type:"Patrón algebraico",q:`Una sucesión se define por aₙ = 1+2+...+n+n². ¿Cuál es a_${n}?`,...o,e:`1+...+n=n(n+1)/2. Luego se suma n²: ${total}+${n*n}=${c}.`}
+}
+
+const generators=[
+qVisualXor,qMatrix,qLogic,qRotation,qOdd,qSequenceVisual,
+qMixedSeries,qSecondDiff,qSeries,qConditional,qClock,
+qAnalogy,qLogic,qPercentChain,qWork,qAP,qComb,
+qMixedSeries,qSecondDiff,qVisualXor,qView,qLogic,qClock
+];
+let questions=[],answers=[],current=0,timeLeft=45*60,timer=null;
+
+function generateExam(){
+ clearInterval(timer); questions=generators.map(g=>g()); answers=Array(questions.length).fill(null); current=0; timeLeft=45*60;
+ $("results").classList.add("hidden"); $("exam").classList.remove("hidden"); render(); updateTimer();
+ timer=setInterval(()=>{timeLeft--;updateTimer();if(timeLeft<=0)finishExam(false)},1000);
+}
+function updateTimer(){let m=Math.floor(timeLeft/60),s=timeLeft%60;$("timer").textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
+function render(){
+ const q=questions[current]; $("counter").textContent=`Pregunta ${current+1} de ${questions.length}`;
+ $("answered").textContent=`Respondidas: ${answers.filter(x=>x!==null).length}/${questions.length}`;
+ $("bar").style.width=`${((current+1)/questions.length)*100}%`; $("question").textContent=q.q; $("visual").innerHTML=q.visual||"";
+ $("options").innerHTML="";
+ q.options.forEach((x,i)=>{const b=document.createElement("button");b.type="button";b.className="option"+(answers[current]===i?" sel":"");b.textContent=`${"ABCD"[i]}) ${x}`;b.onclick=()=>{answers[current]=i;render()};$("options").appendChild(b)});
+ $("prev").disabled=current===0;$("next").disabled=current===questions.length-1;
+}
+$("prev").onclick=()=>{if(current>0){current--;render()}};
+$("next").onclick=()=>{if(current<questions.length-1){current++;render()}};
+$("finish").onclick=()=>{if(confirm("¿Deseas finalizar el examen y ver tu calificación?"))finishExam(true)};
+$("newExam").onclick=()=>{if(confirm("Se generará un examen nuevo con preguntas y valores diferentes. ¿Continuar?"))generateExam()};
+
+function finishExam(scroll=true){
+ clearInterval(timer);
+ const hits=questions.reduce((n,q,i)=>n+(answers[i]===q.answer),0),pct=Math.round(hits/questions.length*100);
+ $("exam").classList.add("hidden");$("results").classList.remove("hidden");$("score").textContent=`${hits}/${questions.length}`;
+ $("summary").innerHTML=`<b>${pct}% de aciertos</b><br>Correctas: ${hits} · Incorrectas/sin responder: ${questions.length-hits}`;
+ $("review").innerHTML="<h3>Revisión del intento</h3>";
+ questions.forEach((q,i)=>{$("review").innerHTML+=`<div class="item"><div class="${answers[i]===q.answer?"ok":"no"}">${answers[i]===q.answer?"✓ Correcta":"✗ Incorrecta"} — ${q.type}</div><div><b>${i+1}.</b> ${q.q}</div>${q.visual||""}<div><b>Tu respuesta:</b> ${answers[i]===null?"Sin responder":q.options[answers[i]]}</div><div><b>Correcta:</b> ${q.options[q.answer]}</div><div class="small"><b>Explicación:</b> ${q.e}</div></div>`});
+ if(scroll) window.scrollTo({top:0,behavior:"smooth"});
+}
+generateExam();
+
+</script>
+</body>
+</html>
